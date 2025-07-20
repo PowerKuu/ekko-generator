@@ -1,0 +1,19 @@
+[package]
+name = "ekko-generator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+io = "0.0.2"
+tokio = { version = "1.0", features = ["full", "signal"] }
+ctrlc = "3.4"
+rayon = "1.10"
+
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+
+sqlx = { version = "0.7", features = ["runtime-async-std", "postgres"] }
+
+pumpkin-world = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-world" }
+pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-util" }
+pumpkin-data = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-data" }

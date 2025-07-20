@@ -1,0 +1,39 @@
+# Chunk Generation Configuration
+
+# Processing settings
+chunks_start_index = 0
+chunk_batch_size = 5000
+
+# Generation mode
+use_radius_generation = true
+radius = 2  # Set to null/comment out to auto-calculate from chunks_to_load
+chunks_to_load = 100000  # Only used if use_radius_generation = false
+
+# World positioning
+center_x = 0
+center_z = 0
+
+
+# World generation
+seed = 8221611027149008269
+
+# Example configurations (uncomment one):
+
+# Spawn area generation (50 chunk radius around spawn)
+# center_x = 0
+# center_z = 0
+# use_radius_generation = true
+# radius = 50
+
+# Player base generation (25 chunk radius around base)
+# center_x = 1000
+# center_z = -500
+# use_radius_generation = true
+# radius = 25
+
+# Large square grid (1 million chunks)
+# use_radius_generation = false
+# chunks_to_load = 1000000
+
+# Resume from specific point (if crashed)
+# chunks_start_index = 485293
