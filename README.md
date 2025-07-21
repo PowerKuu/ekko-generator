@@ -24,3 +24,10 @@ When generating terrain, you need to know "what's the surface height at coordina
 - 🌍 **Multi-Dimension Support**: Works with Overworld, Nether, and End dimensions
 - 💾 **Memory Efficient**: Flat array structures for better cache performance
 - 💾 **Block Storage in Postgresql**: Integrates with PostgreSQL for efficient, persistent storage of block and terrain data, enabling scalable world saving and retrieval.
+
+## Todo
+
+- [ ] Fix last batch
+- [ ] Optimize further
+- [ ] Reduce databse storage size
+- [ ] Add more tests for edge cases

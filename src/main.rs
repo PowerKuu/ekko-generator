@@ -233,8 +233,8 @@ pub async fn run() {
 // =============================================================================
 
 pub fn accuracy_test() {
-    let chunk_x = -3;
-    let chunk_z = -17;
+    let chunk_x = -2;
+    let chunk_z = 1;
     let config = Config::default();
     let seed = Seed(config.seed);
     let dimension = Dimension::Overworld;
@@ -244,7 +244,8 @@ pub fn accuracy_test() {
     let start_time = Instant::now();
     generate_surface_heights(&mut proto);
     let duration = start_time.elapsed();
-    println!("Surface height generation took: {:?}", duration);
+
+    let expected_flat_surface_height_map = [65, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 65, 66, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 67, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 65, 65, 65, 64, 64, 64, 64, 64, 64, 64, 64, 66, 66, 66, 66, 66, 65, 65, 64, 64, 64, 64, 63, 63, 64, 64, 64, 66, 66, 65, 65, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 65, 64, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63];
 
     // Top Blocks 16 x 16 chunk display x, and z and get height. Every 16 is a new z
     for x in 0..16 {
@@ -260,10 +261,35 @@ pub fn accuracy_test() {
             );
         }
     }
-    println!(
-        "Generated chunk with seed {} in dimension {:?}.",
-        seed.0, dimension
+
+    // Check if the generated height map matches the expected one
+    if proto.flat_surface_height_map != Box::new(expected_flat_surface_height_map) {
+        eprintln!("❌ Height map does not match expected values!");
+    } else {
+        println!("✅ Height map matches expected values!");
+    }
+
+    println!("Surface height generation took: {:?}", duration);
+}
+
+pub async fn parallel_test() {
+    let chunk_x = -1;
+    let chunk_z = -14;
+    let times = 10000;
+    let config = Config::default();
+    let dimension = Dimension::Overworld;
+    let start_time = Instant::now();
+    println!("Starting parallel test for {} chunks...", times);
+
+    process_chunks_simple(
+        vec![(chunk_x, chunk_z); times],
+        &config,
+        dimension,
+        move |proto, chunk_x, chunk_z| {},
     );
+
+    let duration = start_time.elapsed();
+    println!("Parallel test completed in: {:?}", duration);
 }
 
 pub async fn parallel_test_with_storage() {
