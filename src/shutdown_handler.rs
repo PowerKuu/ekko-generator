@@ -9,18 +9,21 @@ pub async fn setup_shutdown_handler() {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for ctrl-c");
-        
+
         println!("\n🛑 Shutdown signal received! Saving progress...");
         SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
-        
+
         // Give a moment for current operations to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         let current_index = CURRENT_CHUNK_INDEX.load(Ordering::SeqCst);
         println!("📝 Current progress saved!");
-        println!("💾 To resume generation, update your config chunks_start_index to: {}", current_index);
+        println!(
+            "💾 To resume generation, update your config chunks_start_index to: {}",
+            current_index
+        );
         println!("👋 Goodbye!");
-        
+
         std::process::exit(0);
     });
 }

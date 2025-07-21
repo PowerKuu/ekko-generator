@@ -6,16 +6,19 @@ chunk_batch_size = 5000
 
 # Generation mode
 use_radius_generation = true
-radius = 2  # Set to null/comment out to auto-calculate from chunks_to_load
-chunks_to_load = 100000  # Only used if use_radius_generation = false
+radius = 50  # Set to null/comment out to auto-calculate from chunks_to_load
+chunks_to_load = 0  # Only used if use_radius_generation = false
 
 # World positioning
 center_x = 0
 center_z = 0
 
-
 # World generation
 seed = 8221611027149008269
+
+# Database settings
+database_url = "postgresql://postgres:Passord01@localhost:5432/ekko"
+database_storage_batch_size = 1000
 
 # Example configurations (uncomment one):
 
