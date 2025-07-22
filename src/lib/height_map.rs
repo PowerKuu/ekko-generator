@@ -19,6 +19,7 @@ const TERRAIN_MAX_Y: i32 = 200; // Reasonable mountain height
 const ADAPTIVE_SEARCH_RANGE: i32 = 5; // +/- blocks around estimated surface
 const INITIAL_SURFACE_ESTIMATE: i32 = 75; // Common surface height
 const INITIAL_WIDE_SEARCH_RANGE: i32 = 40; // Wider range for first few samples
+const SAMPLES_FOR_CONVERGENCE: usize = 16; // How many samples before trusting estimate
 
 pub struct SurfaceHeightGenerator {
     terrain_min_y: i32,
@@ -26,6 +27,7 @@ pub struct SurfaceHeightGenerator {
     adaptive_search_range: i32,
     initial_surface_estimate: i32,
     initial_wide_search_range: i32,
+    samples_for_convergence: usize,
 }
 
 impl SurfaceHeightGenerator {
@@ -36,6 +38,7 @@ impl SurfaceHeightGenerator {
             adaptive_search_range: ADAPTIVE_SEARCH_RANGE,
             initial_surface_estimate: INITIAL_SURFACE_ESTIMATE,
             initial_wide_search_range: INITIAL_WIDE_SEARCH_RANGE,
+            samples_for_convergence: SAMPLES_FOR_CONVERGENCE,
         }
     }
 
@@ -46,13 +49,8 @@ impl SurfaceHeightGenerator {
         
         proto.noise_sampler.sample_start_density();
         
-        // Process each column of cells along the X axis with early termination
+        // Process each column of cells along the X axis
         for cell_x in 0..params.horizontal_cells {
-            // Early global termination check
-            if state.columns_completed >= 256 {
-                break;
-            }
-            
             proto.noise_sampler.sample_end_density(cell_x as u8);
             
             if self.process_x_cells(proto, &params, &mut state, cell_x) {
@@ -62,7 +60,6 @@ impl SurfaceHeightGenerator {
             proto.noise_sampler.swap_buffers();
         }
     }
-    
 
     /// Extract all generation parameters from the chunk
     fn calculate_generation_params(&self, proto: &ProtoChunk) -> GenerationParams {
@@ -106,21 +103,16 @@ impl SurfaceHeightGenerator {
         cell_x: u16,
         cell_z: u16,
     ) -> CellBounds {
-        // CRAZY: Predict surface height for this cell using neighboring heights
-        let predicted_surface = self.predict_surface_height(params, state, cell_x, cell_z)
-            .unwrap_or_else(|| state.global_surface_average());
-
-        // Use smaller search range for predictions (more confident) vs fallback (less confident)  
-        let search_range = if self.predict_surface_height(params, state, cell_x, cell_z).is_some() {
-            self.adaptive_search_range // Confident prediction
+        let search_range = if state.surface_samples.len() < self.samples_for_convergence {
+            self.initial_wide_search_range
         } else {
-            self.initial_wide_search_range // Fallback to global estimate
+            self.adaptive_search_range
         };
 
-        let adaptive_start = ((predicted_surface - search_range - params.min_y as i32)
+        let adaptive_start = ((state.estimated_surface_y - search_range - params.min_y as i32)
             / params.vertical_cell_block_count as i32)
             .max(params.start_cell as i32) as u16;
-        let adaptive_end = ((predicted_surface + search_range - params.min_y as i32)
+        let adaptive_end = ((state.estimated_surface_y + search_range - params.min_y as i32)
             / params.vertical_cell_block_count as i32)
             .min(params.end_cell as i32) as u16;
 
@@ -141,53 +133,6 @@ impl SurfaceHeightGenerator {
         }
     }
 
-    fn predict_surface_height(
-        &self,
-        params: &GenerationParams,
-        state: &GenerationState,
-        cell_x: u16,
-        cell_z: u16,
-    ) -> Option<i32> {
-        // Get world coordinates of the center of this cell
-        let world_x = (cell_x as i32 * params.horizontal_cell_block_count as i32 + params.horizontal_cell_block_count as i32 / 2) as usize;
-        let world_z = (cell_z as i32 * params.horizontal_cell_block_count as i32 + params.horizontal_cell_block_count as i32 / 2) as usize;
-        
-        // Clamp to chunk bounds
-        let chunk_x = world_x.min(15);
-        let chunk_z = world_z.min(15);
-
-        let mut neighbor_heights = Vec::new();
-        let mut neighbor_count = 0;
-
-        // Sample neighboring columns in a 3x3 pattern around this cell
-        for dx in -1i32..=1 {
-            for dz in -1i32..=1 {
-                if dx == 0 && dz == 0 { continue; } // Skip center
-
-                let nx = chunk_x as i32 + dx;
-                let nz = chunk_z as i32 + dz;
-
-                if nx >= 0 && nx < 16 && nz >= 0 && nz < 16 {
-                    let nx_u = nx as usize;
-                    let nz_u = nz as usize;
-                    
-                    if state.surface_found[nx_u][nz_u] {
-                        neighbor_heights.push(state.surface_heights[nx_u][nz_u]);
-                        neighbor_count += 1;
-                    }
-                }
-            }
-        }
-
-        if neighbor_count >= 2 {
-            // Simple average of neighboring heights for prediction
-            let sum: i32 = neighbor_heights.iter().sum();
-            Some(sum / neighbor_count)
-        } else {
-            None // Not enough neighbors for prediction
-        }
-    }
-
     /// Process all cells along the Z axis for a given X position
     fn process_x_cells(
         &self,
@@ -197,11 +142,6 @@ impl SurfaceHeightGenerator {
         cell_x: u16,
     ) -> bool {
         for cell_z in 0..params.horizontal_cells {
-            // Early termination check
-            if state.columns_completed >= 256 {
-                return true;
-            }
-            
             if self.process_xz_cell(proto, params, state, cell_x, cell_z) {
                 return true; // All columns completed
             }
@@ -248,45 +188,17 @@ impl SurfaceHeightGenerator {
         let inv_horizontal = 1.0 / params.horizontal_cell_block_count as f64;
         let inv_vertical = 1.0 / params.vertical_cell_block_count as f64;
 
-        // Early check: if all columns in this cell are already found, skip entirely
-        if self.all_columns_found_in_cell(state, params, cell_bounds) {
-            return state.columns_completed >= 256;
-        }
-
         // Process each block layer in this cell (top to bottom)
         for local_y in (0..params.vertical_cell_block_count).rev() {
             let block_y = sample_start_y + local_y as i32;
             let delta_y = local_y as f64 * inv_vertical;
             proto.noise_sampler.interpolate_y(delta_y);
 
-            if self.process_blocks_at_height(proto, params, state, cell_bounds, block_y, local_y as i32, sample_start_y, inv_horizontal) {
+            if self.process_blocks_at_height(proto, params, state, cell_bounds, block_y, inv_horizontal) {
                 return true;
             }
         }
         false
-    }
-    
-    /// Check if all columns within a cell already have surfaces found
-    fn all_columns_found_in_cell(
-        &self,
-        state: &GenerationState,
-        params: &GenerationParams,
-        cell_bounds: &CellBounds,
-    ) -> bool {
-        for local_x in 0..params.horizontal_cell_block_count {
-            let block_x = cell_bounds.cell_start_x + local_x as i32;
-            let chunk_local_x = (block_x - params.start_block_x) as usize;
-            
-            for local_z in 0..params.horizontal_cell_block_count {
-                let block_z = cell_bounds.cell_start_z + local_z as i32;
-                let chunk_local_z = (block_z - params.start_block_z) as usize;
-                
-                if !state.surface_found[chunk_local_x][chunk_local_z] {
-                    return false; // Found at least one column that still needs processing
-                }
-            }
-        }
-        true // All columns in this cell are done
     }
 
     /// Process all individual blocks at a specific height (Y level)
@@ -297,8 +209,6 @@ impl SurfaceHeightGenerator {
         state: &mut GenerationState,
         cell_bounds: &CellBounds,
         block_y: i32,
-        local_y: i32,
-        sample_start_y: i32,
         inv_horizontal: f64,
     ) -> bool {
         // Loop through all blocks in this horizontal layer
@@ -324,8 +234,8 @@ impl SurfaceHeightGenerator {
                 let block_state = proto
                     .noise_sampler
                     .sample_block_state(
-                        Vector3::new(cell_bounds.sample_start_x, sample_start_y, cell_bounds.sample_start_z),
-                        Vector3::new(local_x as i32, local_y, local_z as i32),
+                        Vector3::new(cell_bounds.sample_start_x, block_y, cell_bounds.sample_start_z),
+                        Vector3::new(local_x as i32, 0, local_z as i32),
                         &mut proto.surface_height_estimate_sampler,
                     )
                     .unwrap_or(proto.default_block);
@@ -356,8 +266,9 @@ impl SurfaceHeightGenerator {
         let index = chunk_local_x * 16 + chunk_local_z;
         proto.flat_surface_height_map[index] = block_y as i64;
         state.surface_found[chunk_local_x][chunk_local_z] = true;
-        state.surface_heights[chunk_local_x][chunk_local_z] = block_y; // Store for prediction
         state.columns_completed += 1;
+        state.surface_samples.push(block_y);
+        state.update_surface_estimate(self.samples_for_convergence);
     }
 }
 
@@ -377,38 +288,28 @@ struct GenerationParams {
 
 struct GenerationState {
     surface_found: [[bool; 16]; 16],
-    surface_heights: [[i32; 16]; 16], // Store actual found heights for prediction
     columns_completed: usize,
-    // Removed old surface estimation - using predictive approach instead
+    surface_samples: Vec<i32>,
+    estimated_surface_y: i32,
 }
 
 impl GenerationState {
-    fn new(_initial_estimate: i32) -> Self {
+    fn new(initial_estimate: i32) -> Self {
         Self {
             surface_found: [[false; 16]; 16],
-            surface_heights: [[0; 16]; 16],
             columns_completed: 0,
+            surface_samples: Vec::new(),
+            estimated_surface_y: initial_estimate,
         }
     }
 
-    /// Simple global average of all found surfaces for fallback prediction
-    fn global_surface_average(&self) -> i32 {
-        let mut sum = 0i32;
-        let mut count = 0;
-        
-        for row in &self.surface_heights {
-            for &height in row {
-                if height != 0 { // Assuming 0 means not found
-                    sum += height;
-                    count += 1;
-                }
-            }
-        }
-        
-        if count > 0 {
-            sum / count
+    fn update_surface_estimate(&mut self, samples_for_convergence: usize) {
+        if self.surface_samples.len() <= samples_for_convergence {
+            self.estimated_surface_y = self.surface_samples.iter().sum::<i32>() / self.surface_samples.len() as i32;
         } else {
-            75 // Fallback to reasonable default
+            let weight = 0.1;
+            let latest_sample = *self.surface_samples.last().unwrap();
+            self.estimated_surface_y = ((1.0 - weight) * self.estimated_surface_y as f32 + weight * latest_sample as f32) as i32;
         }
     }
 }
@@ -420,6 +321,12 @@ struct CellBounds {
     cell_start_z: i32,
     sample_start_x: i32,
     sample_start_z: i32,
+}
+
+// Legacy function to maintain compatibility
+pub fn generate_surface_heights(proto: &mut ProtoChunk) {
+    let generator = SurfaceHeightGenerator::new();
+    generator.generate(proto);
 }
 
 // Helper functions
@@ -456,9 +363,4 @@ pub fn get_chunk_proto<'a>(
         &generation_settings.random_config,
         generation_settings.generation_settings,
     )
-}
-
-pub fn generate_surface_heights(proto: &mut ProtoChunk) {
-    let generator = SurfaceHeightGenerator::new();
-    generator.generate(proto);
 }

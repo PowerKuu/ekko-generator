@@ -1,6 +1,6 @@
 use crate::lib::config_loader::Config;
 use crate::lib::height_map::{
-    create_generation_settings, generate_surface_heights, get_chunk_proto,
+    create_generation_settings, generate_surface_heights, get_chunk_proto, GenerationSettings,
 };
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_world::ProtoChunk;
@@ -134,7 +134,7 @@ pub fn get_radius_stats(radius: i32) -> (usize, f64, i32) {
 /// Process a single batch of chunks in parallel with shutdown checking and save callback
 pub fn process_batch_parallel<F>(
     chunk_coords: &[(i32, i32)],
-    generation_settings: Arc<crate::lib::height_map::GenerationSettings>,
+    generation_settings: Arc<GenerationSettings>,
     chunk_callback: F,
 ) -> bool
 where

@@ -71,7 +71,7 @@ pub async fn parallel_test() {
     let dimension = Dimension::Overworld;
     let start_time = Instant::now();
     println!("Starting parallel test for {} chunks...", times);
-
+    
     process_chunks_simple(
         vec![(chunk_x, chunk_z); times],
         &config,
