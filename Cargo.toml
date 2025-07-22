@@ -4,7 +4,11 @@ debug = true
 [package]
 name = "ekko-generator"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[[bin]]
+name = "ekko-generator"
+path = "src/main.rs"
 
 [dependencies]
 io = "0.0.2"

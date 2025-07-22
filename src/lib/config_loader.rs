@@ -20,6 +20,7 @@ pub struct Config {
     // World generation
     pub seed: u64,
 
+    pub database_enabled: bool,
     pub database_url: String,
     pub database_storage_batch_size: usize,
 }
@@ -27,6 +28,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            database_enabled: true,
             chunks_start_index: 0,
             chunk_batch_size: 1000,
             chunks_to_load: 10000,

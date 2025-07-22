@@ -17,6 +17,7 @@ center_z = 0
 seed = 8221611027149008269
 
 # Database settings
+store_blocks = false
 database_url = "postgresql://postgres:Passord01@localhost:5432/ekko"
 database_storage_batch_size = 1000
 
