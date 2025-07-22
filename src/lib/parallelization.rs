@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 // Import shutdown functions from shutdown_handler module
-use crate::lib::shutdown_handler::{is_shutdown_requested, update_current_chunk_index};
+use crate::lib::shutdown_handler::{is_shutdown_requested};
 
 /// Statistics for batch processing
 #[derive(Debug, Clone)]

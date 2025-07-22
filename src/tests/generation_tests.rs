@@ -1,4 +1,5 @@
 use crate::lib::config_loader::Config;
+
 use crate::lib::height_map::{
     create_generation_settings, generate_surface_heights, get_chunk_proto,
 };

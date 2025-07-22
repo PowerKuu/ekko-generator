@@ -106,7 +106,7 @@ pub async fn ekko() {
 
     let chunk_callback = create_chunk_callback(storage.clone());
 
-    let progress_callback = create_progress_callback(total_start_time);
+    let progress_callback = create_progress_callback();
 
     let result = process_all_batches(
         batch_ranges,
@@ -227,7 +227,7 @@ fn create_chunk_callback(
     }
 }
 
-fn create_progress_callback(total_start_time: Instant) -> impl Fn(BatchStats) {
+fn create_progress_callback() -> impl Fn(BatchStats) {
     move |stats: BatchStats| {
         update_current_chunk_index(stats.chunks_completed);
 

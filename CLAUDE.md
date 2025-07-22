@@ -25,19 +25,24 @@ let radius = config.radius.unwrap_or(default_radius);
 
 **Problem we encountered:**
 ```rust
-// This calculates a SQUARE area (side²)
+// This calculates a SQUARE area (sideï¿½)
 fn calculate_chunks_for_chunk_radius(radius: i32) -> usize {
     (2 * radius + 1) * (2 * radius + 1)  // 10201 chunks
 }
 
-// But this generates a CIRCULAR area (À*r²)  
+// But this generates a CIRCULAR area (ï¿½*rï¿½)  
 fn generate_radius_coords(radius: i32) -> Vec<(i32, i32)> {
-    // Only includes chunks where x² + z² d radius²
+    // Only includes chunks where xï¿½ + zï¿½ d radiusï¿½
     // Returns 7845 chunks, not 10201!
 }
 ```
 
 **The fix:** Always ensure calculation functions match their actual usage patterns.
+
+## Command Line Notes
+
+- `cargo run --release accuracy_test = accuracy_test for chunk gen`: Command used for running accuracy test for chunk generation
+- `cargo run --release parallel_test = speed_test for chunk gen`: Command used for running parallel speed test for chunk generation (Only need for speed improvement)
 
 ## Summary
 
