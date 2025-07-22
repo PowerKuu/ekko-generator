@@ -1,6 +1,8 @@
 use crate::lib::config_loader::Config;
-use crate::lib::height_map::{create_generation_settings, generate_surface_heights, get_chunk_proto};
-use crate::lib::parallelization::{process_chunks_simple, generate_radius_coords};
+use crate::lib::height_map::{
+    create_generation_settings, generate_surface_heights, get_chunk_proto,
+};
+use crate::lib::parallelization::{generate_radius_coords, process_chunks_simple};
 use crate::lib::storage::BlockStorage;
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_world::{dimension::Dimension, generation::Seed};
@@ -20,7 +22,20 @@ pub fn accuracy_test() {
     generate_surface_heights(&mut proto);
     let duration = start_time.elapsed();
 
-    let expected_flat_surface_height_map = [65, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 65, 66, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 67, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 65, 65, 65, 64, 64, 64, 64, 64, 64, 64, 64, 66, 66, 66, 66, 66, 65, 65, 64, 64, 64, 64, 63, 63, 64, 64, 64, 66, 66, 65, 65, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 65, 64, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63];
+    let expected_flat_surface_height_map = [
+        65, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 67, 67, 67, 67, 66, 66,
+        66, 66, 66, 66, 66, 66, 66, 65, 65, 66, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+        66, 65, 67, 67, 67, 67, 67, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 66, 66, 66, 66, 66,
+        66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+        66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+        66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66,
+        66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 66,
+        66, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 65, 65, 65,
+        64, 64, 64, 64, 64, 64, 64, 64, 66, 66, 66, 66, 66, 65, 65, 64, 64, 64, 64, 63, 63, 64, 64,
+        64, 66, 66, 65, 65, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 65, 64, 64,
+        64, 63, 63, 63, 63, 63, 63, 63, 63, 63, 66, 65, 65, 64, 64, 63, 63, 63, 63, 63, 63, 63, 63,
+        63, 63, 63,
+    ];
 
     // Top Blocks 16 x 16 chunk display x, and z and get height. Every 16 is a new z
     for x in 0..16 {
@@ -47,7 +62,6 @@ pub fn accuracy_test() {
     println!("Surface height generation took: {:?}", duration);
 }
 
-
 pub async fn parallel_test() {
     let chunk_x = -1;
     let chunk_z = -14;
@@ -68,7 +82,6 @@ pub async fn parallel_test() {
     println!("Parallel test completed in: {:?}", duration);
 }
 
-
 pub async fn parallel_test_with_storage() {
     let chunk_x = -1;
     let chunk_z = -14;
@@ -80,9 +93,12 @@ pub async fn parallel_test_with_storage() {
 
     // Create storage for testing
     let storage = Arc::new(
-        BlockStorage::new(&config.database_url, config.database_storage_batch_size)
-            .await
-            .expect("Failed to create storage"),
+        BlockStorage::new(
+            &config.database_test_url,
+            config.database_storage_batch_size,
+        )
+        .await
+        .expect("Failed to create storage"),
     );
     storage
         .create_raw_table()
@@ -121,7 +137,6 @@ pub async fn parallel_test_with_storage() {
     println!("Parallel test completed in: {:?}", duration);
 }
 
-
 pub async fn radius_test_with_storage() {
     let config = Config::default();
     let dimension = Dimension::Overworld;
@@ -141,9 +156,12 @@ pub async fn radius_test_with_storage() {
 
     // Create storage for testing
     let storage = Arc::new(
-        BlockStorage::new(&config.database_url, config.database_storage_batch_size)
-            .await
-            .expect("Failed to create storage"),
+        BlockStorage::new(
+            &config.database_test_url,
+            config.database_storage_batch_size,
+        )
+        .await
+        .expect("Failed to create storage"),
     );
     storage
         .create_raw_table()

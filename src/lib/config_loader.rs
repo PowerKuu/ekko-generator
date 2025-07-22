@@ -5,7 +5,7 @@ use std::fs;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     // Processing configuration
-    pub chunks_start_index: usize,
+    pub chunk_start_index: usize,
     pub chunk_batch_size: usize,
     pub chunks_to_load: usize, // Only used if use_radius_generation is false
 
@@ -22,6 +22,7 @@ pub struct Config {
 
     pub database_enabled: bool,
     pub database_url: String,
+    pub database_test_url: String,
     pub database_storage_batch_size: usize,
 }
 
@@ -29,16 +30,16 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             database_enabled: true,
-            chunks_start_index: 0,
+            chunk_start_index: 0,
             chunk_batch_size: 1000,
-            chunks_to_load: 10000,
+            chunks_to_load: 0,
             center_x: 0,
             center_z: 0,
             use_radius_generation: true,
             radius: Some(25),
             seed: 8221611027149008269,
-            database_url: "postgresql://postgres:Passord01@localhost:5432/ekko?schema=public"
-                .to_owned(),
+            database_url: "postgresql://postgres:Passord01@localhost:5432/ekko".to_owned(),
+            database_test_url: "postgresql://postgres:Passord01@localhost:5432/ekko".to_owned(),
             database_storage_batch_size: 1000,
         }
     }

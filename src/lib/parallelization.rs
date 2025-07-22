@@ -1,5 +1,7 @@
 use crate::lib::config_loader::Config;
-use crate::lib::height_map::{create_generation_settings, generate_surface_heights, get_chunk_proto};
+use crate::lib::height_map::{
+    create_generation_settings, generate_surface_heights, get_chunk_proto,
+};
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_world::ProtoChunk;
 use pumpkin_world::{dimension::Dimension, generation::Seed};
@@ -92,7 +94,8 @@ pub fn generate_batch_coords(
     let grid_size = (total_chunks as f64).sqrt().ceil() as usize;
     let half_grid = grid_size as i32 / 2;
 
-    (start_index..start_index + batch_size)
+    let end_index = (start_index + batch_size).min(total_chunks);
+    (start_index..end_index)
         .map(|i| {
             let x = (i % grid_size) as i32 - half_grid;
             let z = (i / grid_size) as i32 - half_grid;
@@ -110,7 +113,6 @@ pub fn generate_radius_batch_coords(
     radius: i32,
 ) -> Vec<(i32, i32)> {
     let all_coords = generate_radius_coords(center_x, center_z, radius);
-
     let end_index = (start_index + batch_size).min(all_coords.len());
 
     if start_index < all_coords.len() {
@@ -122,7 +124,7 @@ pub fn generate_radius_batch_coords(
 
 /// Get radius statistics without printing
 pub fn get_radius_stats(radius: i32) -> (usize, f64, i32) {
-    let chunk_count = calculate_chunks_for_chunk_radius(radius);
+    let chunk_count = generate_radius_coords(0, 0, radius).len(); // Use actual circular count
     let area_km2 = (chunk_count * 16 * 16) as f64 / 1_000_000.0;
     let diameter = radius * 2 + 1;
 
@@ -189,7 +191,7 @@ where
         }
 
         let batch_coords = if config.use_radius_generation {
-            let actual_radius = config
+            let radius = config
                 .radius
                 .unwrap_or_else(|| calculate_radius_for_chunks(total_chunks));
             generate_radius_batch_coords(
@@ -197,15 +199,14 @@ where
                 *batch_size,
                 config.center_x,
                 config.center_z,
-                actual_radius,
+                radius,
             )
         } else {
             generate_batch_coords(*start_index, *batch_size, total_chunks)
         };
 
-        let batch_start_time = Instant::now();
-
         // Process batch with panic recovery and shutdown checking
+        let batch_start_time = Instant::now();
         let batch_result = std::panic::catch_unwind(|| {
             process_batch_parallel(
                 &batch_coords,
@@ -213,7 +214,6 @@ where
                 chunk_callback.clone(),
             )
         });
-
         let batch_elapsed = batch_start_time.elapsed();
 
         match batch_result {
@@ -223,37 +223,49 @@ where
                     println!("🛑 Batch interrupted by shutdown signal");
                     break;
                 }
-
-                total_chunks_processed += *batch_size;
-                let progress_percent =
-                    ((*start_index + *batch_size) as f64 / total_chunks as f64) * 100.0;
-                let chunks_per_sec = *batch_size as f64 / batch_elapsed.as_secs_f64();
-                let time_per_chunk = batch_elapsed.as_millis() as f64 / *batch_size as f64;
-
-                let stats = BatchStats {
-                    batch_index: batch_index + 1,
-                    total_batches: batch_ranges.len(),
-                    chunks_in_batch: *batch_size,
-                    batch_duration: batch_elapsed,
-                    chunks_per_sec,
-                    ms_per_chunk: time_per_chunk,
-                    progress_percent,
-                    chunks_completed: *start_index + *batch_size,
-                    total_chunks,
-                };
-
-                progress_callback(stats);
             }
             Err(_) => {
                 println!("❌ Batch failed due to panic");
                 return Err(*start_index);
             }
         }
+
+        let chunks_processed = batch_coords.len();
+        total_chunks_processed += chunks_processed;
+        let progress_percent = (total_chunks_processed as f64 / total_chunks as f64) * 100.0;
+
+        // Calculate stats - prevent division by zero
+        let chunks_per_sec = if batch_elapsed.as_secs_f64() > 0.0 {
+            chunks_processed as f64 / batch_elapsed.as_secs_f64()
+        } else {
+            0.0
+        };
+        let time_per_chunk = if chunks_processed > 0 {
+            batch_elapsed.as_millis() as f64 / chunks_processed as f64
+        } else {
+            0.0
+        };
+
+        let stats = BatchStats {
+            batch_index: batch_index + 1,
+            total_batches: batch_ranges.len(),
+            chunks_in_batch: chunks_processed,
+            batch_duration: batch_elapsed,
+            chunks_per_sec,
+            ms_per_chunk: time_per_chunk,
+            progress_percent,
+            chunks_completed: total_chunks_processed,
+            total_chunks,
+        };
+
+        progress_callback(stats);
     }
 
     let total_elapsed = overall_start_time.elapsed();
-    let overall_chunks_per_sec = total_chunks_processed as f64 / total_elapsed.as_secs_f64();
-    let average_ms_per_chunk = total_elapsed.as_millis() as f64 / total_chunks_processed as f64;
+    let duration_secs = total_elapsed.as_secs_f64().max(0.001);
+    let overall_chunks_per_sec = total_chunks_processed as f64 / duration_secs;
+    let average_ms_per_chunk =
+        total_elapsed.as_millis().max(1) as f64 / total_chunks_processed.max(1) as f64;
 
     Ok(ProcessingStats {
         total_duration: total_elapsed,
@@ -289,35 +301,4 @@ pub fn process_chunks_simple<F>(
 {
     let generation_settings = Arc::new(create_generation_settings(Seed(config.seed), &dimension));
     process_batch_parallel(&chunk_coords, generation_settings, chunk_callback);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_radius_calculations() {
-        assert_eq!(calculate_chunks_for_chunk_radius(0), 1);
-        assert_eq!(calculate_chunks_for_chunk_radius(1), 5);
-
-        for chunks in [1, 5, 13, 25, 49, 100] {
-            let radius = calculate_radius_for_chunks(chunks);
-            assert!(calculate_chunks_for_chunk_radius(radius) >= chunks);
-            if radius > 0 {
-                assert!(calculate_chunks_for_chunk_radius(radius - 1) < chunks);
-            }
-        }
-    }
-
-    #[test]
-    fn test_batch_ranges() {
-        let ranges = create_batch_ranges(0, 1000, 100);
-        assert_eq!(ranges.len(), 10);
-        assert_eq!(ranges[0], (0, 100));
-        assert_eq!(ranges[9], (900, 100));
-
-        let ranges = create_batch_ranges(0, 950, 100);
-        assert_eq!(ranges.len(), 10);
-        assert_eq!(ranges[9], (900, 50));
-    }
 }

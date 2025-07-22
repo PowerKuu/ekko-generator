@@ -33,11 +33,6 @@ impl BlockStorage {
         })
     }
 
-    /// Get a reference to the underlying client (if needed)
-    pub fn client(&self) -> &Client {
-        &self.client
-    }
-
     /// Queue a chunk for batched storage
     pub async fn queue_chunk(
         &self,
@@ -96,39 +91,33 @@ impl BlockStorage {
         }
 
         // Collect all data into arrays
-        let mut chunk_xs = Vec::new();
-        let mut chunk_zs = Vec::new();
-        let mut local_xs = Vec::new();
-        let mut local_zs = Vec::new();
-        let mut heights = Vec::new();
         let mut world_xs = Vec::new();
         let mut world_zs = Vec::new();
+        let mut world_ys = Vec::new();
 
         for (chunk_x, chunk_z, height_map) in chunks {
             for local_x in 0..16 {
                 for local_z in 0..16 {
                     let index = (local_x * 16 + local_z) as usize;
-                    let height = height_map[index] as i32;
                     let world_x = chunk_x * 16 + local_x;
                     let world_z = chunk_z * 16 + local_z;
+                    let world_y = height_map[index] as i16; // Use i16 for SMALLINT
 
-                    chunk_xs.push(*chunk_x);
-                    chunk_zs.push(*chunk_z);
-                    local_xs.push(local_x);
-                    local_zs.push(local_z);
-                    heights.push(height);
                     world_xs.push(world_x);
                     world_zs.push(world_z);
+                    world_ys.push(world_y);
                 }
             }
         }
 
         // Single query using UNNEST - handles unlimited data in one shot
-        self.client.execute(
-            "INSERT INTO blocks (chunk_x, chunk_z, local_x, local_z, height, world_x, world_z) 
-             SELECT * FROM UNNEST($1::int[], $2::int[], $3::int[], $4::int[], $5::int[], $6::int[], $7::int[])",
-            &[&chunk_xs, &chunk_zs, &local_xs, &local_zs, &heights, &world_xs, &world_zs]
-        ).await?;
+        self.client
+            .execute(
+                "INSERT INTO blocks (world_x, world_z, world_y) 
+             SELECT * FROM UNNEST($1::int[], $2::int[], $3::smallint[])",
+                &[&world_xs, &world_zs, &world_ys],
+            )
+            .await?;
 
         Ok(())
     }
@@ -137,18 +126,11 @@ impl BlockStorage {
     pub async fn create_raw_table(&self) -> Result<(), PgError> {
         self.client
             .execute(
-                r#"
-            CREATE TABLE IF NOT EXISTS blocks (
-                chunk_x INTEGER,
-                chunk_z INTEGER,
-                local_x INTEGER,
-                local_z INTEGER,
-                height INTEGER,
-                world_x INTEGER,
-                world_z INTEGER
-            );
-            -- NO INDEXES, NO CONSTRAINTS - just raw storage
-        "#,
+                "CREATE TABLE IF NOT EXISTS blocks (
+                    world_x INTEGER,
+                    world_z INTEGER,
+                    world_y SMALLINT
+                );",
                 &[],
             )
             .await?;
@@ -187,40 +169,16 @@ impl BlockStorage {
         Ok(())
     }
 
-    /// Add indexes after bulk loading (call this when done with all inserts)
-    pub async fn add_indexes(&self) -> Result<(), PgError> {
-        println!("🔧 Adding database indexes...");
-
-        // Add useful indexes for querying
-        self.client
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_blocks_chunk ON blocks (chunk_x, chunk_z);",
-                &[],
-            )
-            .await?;
-
-        self.client
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_blocks_world_coords ON blocks (world_x, world_z);",
-                &[],
-            )
-            .await?;
-
-        println!("✅ Database indexes added");
-        Ok(())
-    }
-
     /// Get statistics about stored data
-    pub async fn get_stats(&self) -> Result<(i64, i32, i32), PgError> {
-        let row = self.client.query_one(
-            "SELECT COUNT(*) as total_blocks, COUNT(DISTINCT chunk_x || ',' || chunk_z) as total_chunks, COUNT(DISTINCT height) as unique_heights FROM blocks",
-            &[]
-        ).await?;
+    pub async fn get_stats(&self) -> Result<(i64, i32), PgError> {
+        let row = self
+            .client
+            .query_one("SELECT COUNT(*) as total_blocks FROM blocks", &[])
+            .await?;
 
         let total_blocks: i64 = row.get(0);
-        let total_chunks: i64 = row.get(1);
-        let unique_heights: i64 = row.get(2);
+        let total_chunks = (total_blocks / 256) as i32; // 16x16 = 256 blocks per chunk
 
-        Ok((total_blocks, total_chunks as i32, unique_heights as i32))
+        Ok((total_blocks, total_chunks))
     }
 }
