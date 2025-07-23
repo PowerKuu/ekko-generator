@@ -1,0 +1,22 @@
+[package]
+name = "ekko-location"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ekko-location"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+ctrlc.workspace = true
+rayon.workspace = true
+
+toml.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+
+zarrs.workspace = true
+zarrs_storage.workspace = true
+zarrs_filesystem.workspace = true

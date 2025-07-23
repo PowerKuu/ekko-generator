@@ -13,7 +13,7 @@ chunk_radius_end = 250
 
 # Zarr storage settings (Don't change if you are editing/updating existing data)
 zarr_enabled = true
-zarr_storage_location = "./zarr_data"
+zarr_storage_location = "./.zarr_data"
 zarr_chunk_region_size = 64
 zarr_compression = "zstd"  # "none", "gzip", "zstd"
 zarr_compression_level = 3

@@ -37,7 +37,7 @@ impl Default for Config {
             chunk_batch_size: 1000,
 
             zarr_enabled: true,
-            zarr_storage_location: "./zarr_test_data".to_string(), // Dont change its for testing
+            zarr_storage_location: "./.zarr_data_test".to_string(), // Dont change its for testing
             zarr_chunk_region_size: 64,
             zarr_compression: "zstd".to_string(),
             zarr_compression_level: 3,

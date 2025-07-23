@@ -1,16 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "ekko-generation",
+    "ekko-location"
+]
+
 [profile.release]
 debug = true
 
-[package]
-name = "ekko-generator"
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "ekko-generator"
-path = "src/main.rs"
-
-[dependencies]
+[workspace.dependencies]
 tokio = { version = "1.4", features = ["full", "signal"] }
 ctrlc = "3.4"
 rayon = "1.10"
@@ -20,9 +22,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
 
-pumpkin-world = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-world" }
-pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-util" }
-pumpkin-data = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-data" }
 zarrs = "0.21.2"
 zarrs_storage = "0.3.4"
 zarrs_filesystem = "0.2.3"
