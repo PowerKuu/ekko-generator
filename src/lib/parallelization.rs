@@ -3,6 +3,7 @@ use crate::lib::height_map::{
     create_generation_settings, generate_surface_heights, get_chunk_proto, GenerationSettings,
 };
 use pumpkin_util::math::vector2::Vector2;
+use pumpkin_world::generation::chunk_noise::CHUNK_DIM;
 use pumpkin_world::ProtoChunk;
 use pumpkin_world::{dimension::Dimension, generation::Seed};
 use rayon::prelude::*;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 // Import shutdown functions from shutdown_handler module
-use crate::lib::shutdown_handler::{is_shutdown_requested};
+use crate::lib::shutdown_handler::is_shutdown_requested;
 
 /// Statistics for batch processing
 #[derive(Debug, Clone)]
@@ -37,97 +38,116 @@ pub struct ProcessingStats {
     pub average_ms_per_chunk: f64,
 }
 
-/// Count all chunks in a square area with the given chunk radius (centered at 0,0)
-pub fn calculate_chunks_for_chunk_radius(radius: i32) -> usize {
-    let side = 2 * radius + 1;
-    (side * side) as usize
-}
-
-/// Given a block radius, return the number of chunks in a square area
-pub fn calculate_chunks_for_block_radius(radius: i32) -> usize {
-    let chunk_radius = (radius as f32 / 16.0).ceil() as i32;
-    calculate_chunks_for_chunk_radius(chunk_radius)
-}
-
-/// Calculate the radius needed for a specific number of chunks
-pub fn calculate_radius_for_chunks(target_chunks: usize) -> i32 {
-    let mut radius = 0;
-
-    while calculate_chunks_for_chunk_radius(radius) < target_chunks {
-        radius += 1;
-    }
-
-    radius
-}
-
-/// Generate all chunk coordinates within a radius from center point
-pub fn generate_radius_coords(center_x: i32, center_z: i32, radius: i32) -> Vec<(i32, i32)> {
-    let mut coords = Vec::new();
-    let radius_squared = radius * radius;
-
-    for x in -radius..=radius {
-        for z in -radius..=radius {
-            let distance_squared = x * x + z * z;
-            if distance_squared <= radius_squared {
-                coords.push((center_x + x, center_z + z));
+/// Generate all chunk coordinates for a range of radii (circular or square)
+pub fn generate_radius_range_chunk_coords(
+    center_x: i32,
+    center_z: i32,
+    radius_start: i32,
+    radius_end: i32,
+    circular: bool,
+) -> Vec<(i32, i32)> {
+    let mut all_coords = Vec::new();
+    
+    if circular {
+        // Much faster: generate all coords in end radius, exclude those in start radius
+        let radius_end_squared = radius_end * radius_end;
+        let radius_start_squared = if radius_start > 0 { (radius_start - 1) * (radius_start - 1) } else { -1 };
+        
+        for x in -radius_end..=radius_end {
+            for z in -radius_end..=radius_end {
+                let distance_squared = x * x + z * z;
+                if distance_squared <= radius_end_squared && distance_squared > radius_start_squared {
+                    all_coords.push((center_x + x, center_z + z));
+                }
+            }
+        }
+    } else {
+        // Square: generate all coords in end square, exclude those in start square
+        for x in -radius_end..=radius_end {
+            for z in -radius_end..=radius_end {
+                let in_start_square = if radius_start > 0 {
+                    let start_r = radius_start - 1;
+                    x >= -start_r && x <= start_r && z >= -start_r && z <= start_r
+                } else {
+                    false
+                };
+                
+                if !in_start_square {
+                    all_coords.push((center_x + x, center_z + z));
+                }
             }
         }
     }
-
-    // Sort by distance from center for more efficient processing
-    coords.sort_by(|a, b| {
+    
+    // Sort by distance from center for efficient processing
+    all_coords.sort_by(|a, b| {
         let dist_a = (a.0 - center_x) * (a.0 - center_x) + (a.1 - center_z) * (a.1 - center_z);
         let dist_b = (b.0 - center_x) * (b.0 - center_x) + (b.1 - center_z) * (b.1 - center_z);
         dist_a.cmp(&dist_b)
     });
-
-    coords
+    
+    all_coords
 }
 
-/// Generate chunk coordinates for a batch (helper for large scale processing)
-pub fn generate_batch_coords(
-    start_index: usize,
-    batch_size: usize,
-    total_chunks: usize,
-) -> Vec<(i32, i32)> {
-    // Calculate grid size based on total chunks (make it square)
-    let grid_size = (total_chunks as f64).sqrt().ceil() as usize;
-    let half_grid = grid_size as i32 / 2;
-
-    let end_index = (start_index + batch_size).min(total_chunks);
-    (start_index..end_index)
-        .map(|i| {
-            let x = (i % grid_size) as i32 - half_grid;
-            let z = (i / grid_size) as i32 - half_grid;
-            (x, z)
-        })
-        .collect()
-}
-
-/// Generate batch coordinates from radius-based generation
-pub fn generate_radius_batch_coords(
-    start_index: usize,
-    batch_size: usize,
-    center_x: i32,
-    center_z: i32,
-    radius: i32,
-) -> Vec<(i32, i32)> {
-    let all_coords = generate_radius_coords(center_x, center_z, radius);
-    let end_index = (start_index + batch_size).min(all_coords.len());
-
-    if start_index < all_coords.len() {
-        all_coords[start_index..end_index].to_vec()
+pub fn length_of_radius_range_chunk_coords(
+    radius_start: i32,
+    radius_end: i32,
+    circular: bool,
+) -> usize {
+    if circular {
+        // Much faster: calculate total in end radius, subtract total in start radius
+        let mut total_in_end = 0;
+        let radius_squared = radius_end * radius_end;
+        for x in -radius_end..=radius_end {
+            for z in -radius_end..=radius_end {
+                let distance_squared = x * x + z * z;
+                if distance_squared <= radius_squared {
+                    total_in_end += 1;
+                }
+            }
+        }
+        
+        let total_in_start = if radius_start > 0 {
+            let mut count = 0;
+            let start_radius_squared = (radius_start - 1) * (radius_start - 1);
+            for x in -(radius_start - 1)..=(radius_start - 1) {
+                for z in -(radius_start - 1)..=(radius_start - 1) {
+                    let distance_squared = x * x + z * z;
+                    if distance_squared <= start_radius_squared {
+                        count += 1;
+                    }
+                }
+            }
+            count
+        } else {
+            0
+        };
+        
+        total_in_end - total_in_start
     } else {
-        Vec::new()
+        // For square: this IS 100% accurate
+        let outer = (2 * radius_end + 1) * (2 * radius_end + 1);
+        let inner = if radius_start > 0 {
+            let r = radius_start - 1;
+            (2 * r + 1) * (2 * r + 1)
+        } else { 0 };
+        (outer - inner) as usize
     }
 }
 
-/// Get radius statistics without printing
-pub fn get_radius_stats(radius: i32) -> (usize, f64, i32) {
-    let chunk_count = generate_radius_coords(0, 0, radius).len(); // Use actual circular count
-    let area_km2 = (chunk_count * 16 * 16) as f64 / 1_000_000.0;
-    let diameter = radius * 2 + 1;
-
+/// Get radius range statistics without printing
+pub fn get_radius_range_stats(
+    radius_start: i32,
+    radius_end: i32,
+    circular: bool,
+) -> (usize, f64, i32) {
+    let chunk_count = length_of_radius_range_chunk_coords(
+        radius_start,
+        radius_end,
+        circular
+    );
+    let area_km2 = (chunk_count as f64 * (CHUNK_DIM as usize * CHUNK_DIM as usize) as f64) / 1_000_000.0;
+    let diameter = radius_end * 2 + 1;
     (chunk_count, area_km2, diameter)
 }
 
@@ -163,12 +183,12 @@ where
 }
 
 /// Process all batches with parallel execution, error recovery, shutdown handling, and save callback
-pub fn process_all_batches<F, S>(
+pub fn process_all_batches_parallel<F, S>(
     batch_ranges: Vec<(usize, usize)>,
     config: &Config,
     dimension: Dimension,
     total_chunks: usize,
-    mut progress_callback: F,
+    mut batch_callback: F,
     chunk_callback: S,
 ) -> Result<ProcessingStats, usize>
 where
@@ -178,6 +198,15 @@ where
     let generation_settings = Arc::new(create_generation_settings(Seed(config.seed), &dimension));
     let mut total_chunks_processed = 0;
     let overall_start_time = Instant::now();
+
+    // Generate all coordinates once to avoid regenerating for each batch
+    let all_coords = generate_radius_range_chunk_coords(
+        config.chunk_radius_center_x,
+        config.chunk_radius_center_z,
+        config.chunk_radius_start,
+        config.chunk_radius_end,
+        config.chunk_radius_circular,
+    );
 
     for (batch_index, (start_index, batch_size)) in batch_ranges.iter().enumerate() {
         // Check for shutdown before starting each batch
@@ -190,19 +219,12 @@ where
             break;
         }
 
-        let batch_coords = if config.use_radius_generation {
-            let radius = config
-                .radius
-                .unwrap_or_else(|| calculate_radius_for_chunks(total_chunks));
-            generate_radius_batch_coords(
-                *start_index,
-                *batch_size,
-                config.center_x,
-                config.center_z,
-                radius,
-            )
+        // Get batch coordinates by slicing the pre-generated list
+        let batch_coords = if *start_index < all_coords.len() {
+            let end_index = (*start_index + *batch_size).min(all_coords.len());
+            &all_coords[*start_index..end_index]
         } else {
-            generate_batch_coords(*start_index, *batch_size, total_chunks)
+            &[]
         };
 
         // Process batch with panic recovery and shutdown checking
@@ -258,7 +280,7 @@ where
             total_chunks,
         };
 
-        progress_callback(stats);
+        batch_callback(stats);
     }
 
     let total_elapsed = overall_start_time.elapsed();

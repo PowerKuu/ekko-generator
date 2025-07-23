@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 // Global shutdown signal
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 static CURRENT_CHUNK_INDEX: AtomicUsize = AtomicUsize::new(0);
+const SLEEP_TIME: u64 = 200;
 
 pub async fn setup_shutdown_handler() {
     tokio::spawn(async {
@@ -14,7 +15,7 @@ pub async fn setup_shutdown_handler() {
         SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
 
         // Give a moment for current operations to complete
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(SLEEP_TIME)).await;
 
         let current_index = CURRENT_CHUNK_INDEX.load(Ordering::SeqCst);
         println!("📝 Current progress saved!");

@@ -3,9 +3,10 @@ use crate::lib::config_loader::Config;
 use crate::lib::height_map::{
     create_generation_settings, generate_surface_heights, get_chunk_proto,
 };
-use crate::lib::parallelization::{generate_radius_coords, process_chunks_simple};
-use crate::lib::storage::BlockStorage;
+use crate::lib::parallelization::process_chunks_simple;
+use crate::lib::zarr_storage::ZarrBlockStorage;
 use pumpkin_util::math::vector2::Vector2;
+use pumpkin_world::generation::chunk_noise::CHUNK_DIM;
 use pumpkin_world::{dimension::Dimension, generation::Seed};
 use std::sync::Arc;
 use std::time::Instant;
@@ -38,13 +39,12 @@ pub fn accuracy_test() {
         63, 63, 63,
     ];
 
-    // Top Blocks 16 x 16 chunk display x, and z and get height. Every 16 is a new z
-    for x in 0..16 {
-        for z in 0..16 {
-            let index = (x * 16 + z) as usize;
+    for x in 0..CHUNK_DIM {
+        for z in 0..CHUNK_DIM {
+            let index = (x * CHUNK_DIM + z) as usize;
             let y = proto.flat_surface_height_map[index] as i32;
-            let world_x = chunk_x * 16 + x;
-            let world_z = chunk_z * 16 + z;
+            let world_x = chunk_x * CHUNK_DIM as i32 + x as i32;
+            let world_z = chunk_z * CHUNK_DIM as i32 + z as i32;
             let world_y = y;
             println!(
                 "setblock {} {} {} minecraft:diamond_block",
@@ -54,7 +54,7 @@ pub fn accuracy_test() {
     }
 
     // Check if the generated height map matches the expected one
-    if proto.flat_surface_height_map != Box::new(expected_flat_surface_height_map) {
+    if proto.flat_surface_height_map != expected_flat_surface_height_map.into() {
         eprintln!("❌ Height map does not match expected values!");
     } else {
         println!("✅ Height map matches expected values!");
@@ -71,7 +71,7 @@ pub async fn parallel_test() {
     let dimension = Dimension::Overworld;
     let start_time = Instant::now();
     println!("Starting parallel test for {} chunks...", times);
-    
+
     process_chunks_simple(
         vec![(chunk_x, chunk_z); times],
         &config,
@@ -92,19 +92,17 @@ pub async fn parallel_test_with_storage() {
     let start_time = Instant::now();
     println!("Starting parallel test for {} chunks...", times);
 
-    // Create storage for testing
+    // Create zarr storage for testing
     let storage = Arc::new(
-        BlockStorage::new(
-            &config.database_test_url,
-            config.database_storage_batch_size,
+        ZarrBlockStorage::new(
+            &config.zarr_storage_location,
+            config.zarr_chunk_region_size,
+            Some(config.get_zarr_compression()),
+            None, // No metadata for tests
         )
         .await
-        .expect("Failed to create storage"),
+        .expect("Failed to create zarr storage"),
     );
-    storage
-        .create_raw_table()
-        .await
-        .expect("Failed to create table");
 
     let storage_clone = Arc::clone(&storage);
 
@@ -114,25 +112,25 @@ pub async fn parallel_test_with_storage() {
         dimension,
         move |proto, chunk_x, chunk_z| {
             let storage_ref = Arc::clone(&storage_clone);
-            let height_map_owned = proto.flat_surface_height_map.to_vec();
+            let height_map: Vec<i64> = proto.flat_surface_height_map.iter().map(|&h| h as i64).collect();
 
             tokio::spawn(async move {
                 if let Err(e) = storage_ref
-                    .queue_chunk(chunk_x, chunk_z, height_map_owned)
+                    .store_chunk(chunk_x, chunk_z, height_map)
                     .await
                 {
-                    eprintln!("Failed to queue chunk: {}", e);
+                    eprintln!("Failed to store chunk: {}", e);
                 }
             });
         },
     );
 
     // Flush remaining chunks
-    if let Err(e) = storage.flush_queue().await {
-        eprintln!("Failed to flush queue: {}", e);
+    if let Err(e) = storage.flush_chunks().await {
+        eprintln!("Failed to flush chunks: {}", e);
     }
 
-    println!("🔌 Database connection will be closed when storage is dropped");
+    println!("🔌 Zarr storage flushed and closed");
 
     let duration = start_time.elapsed();
     println!("Parallel test completed in: {:?}", duration);
@@ -142,32 +140,37 @@ pub async fn radius_test_with_storage() {
     let config = Config::default();
     let dimension = Dimension::Overworld;
 
-    let chunk_coords = generate_radius_coords(
-        config.center_x,
-        config.center_z,
-        config.radius.unwrap_or(25),
+    use crate::lib::parallelization::generate_radius_range_chunk_coords;
+    
+    let chunk_coords = generate_radius_range_chunk_coords(
+        config.chunk_radius_center_x,
+        config.chunk_radius_center_z,
+        config.chunk_radius_start,
+        config.chunk_radius_end,
+        config.chunk_radius_circular,
     );
 
+    let shape = if config.chunk_radius_circular { "circular" } else { "square" };
     println!(
-        "Testing radius generation with {} chunks in radius {}",
+        "Testing {} radius range generation with {} chunks (radius {} to {})",
+        shape,
         chunk_coords.len(),
-        config.radius.unwrap_or(25)
+        config.chunk_radius_start,
+        config.chunk_radius_end
     );
     let start_time = Instant::now();
 
-    // Create storage for testing
+    // Create zarr storage for testing
     let storage = Arc::new(
-        BlockStorage::new(
-            &config.database_test_url,
-            config.database_storage_batch_size,
+        ZarrBlockStorage::new(
+            &config.zarr_storage_location,
+            config.zarr_chunk_region_size,
+            Some(config.get_zarr_compression()),
+            None, // No metadata for tests
         )
         .await
-        .expect("Failed to create storage"),
+        .expect("Failed to create zarr storage"),
     );
-    storage
-        .create_raw_table()
-        .await
-        .expect("Failed to create table");
 
     let storage_clone = Arc::clone(&storage);
 
@@ -177,25 +180,25 @@ pub async fn radius_test_with_storage() {
         dimension,
         move |proto, chunk_x, chunk_z| {
             let storage_ref = Arc::clone(&storage_clone);
-            let height_map = proto.flat_surface_height_map.clone();
+            let height_map: Vec<i64> = proto.flat_surface_height_map.iter().map(|&h| h as i64).collect();
 
             tokio::spawn(async move {
                 if let Err(e) = storage_ref
-                    .queue_chunk(chunk_x, chunk_z, height_map.to_vec())
+                    .store_chunk(chunk_x, chunk_z, height_map)
                     .await
                 {
-                    eprintln!("Failed to queue chunk: {}", e);
+                    eprintln!("Failed to store chunk: {}", e);
                 }
             });
         },
     );
 
     // Flush remaining chunks
-    if let Err(e) = storage.flush_queue().await {
-        eprintln!("Failed to flush queue: {}", e);
+    if let Err(e) = storage.flush_chunks().await {
+        eprintln!("Failed to flush chunks: {}", e);
     }
 
-    println!("🔌 Database connection will be closed when storage is dropped");
+    println!("🔌 Zarr storage flushed and closed");
 
     let duration = start_time.elapsed();
     println!("Radius test completed in: {:?}", duration);

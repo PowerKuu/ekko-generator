@@ -5,10 +5,7 @@ use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
 use pumpkin_world::{
     dimension::Dimension,
     generation::{
-        chunk_noise::CHUNK_DIM,
-        positions::chunk_pos::{start_block_x, start_block_z},
-        settings::gen_settings_from_dimension,
-        Seed,
+        chunk_noise::CHUNK_DIM, positions::chunk_pos::{start_block_x, start_block_z}, settings::gen_settings_from_dimension, Seed
     },
     ProtoChunk, ProtoNoiseRouters,
 };
@@ -46,17 +43,17 @@ impl SurfaceHeightGenerator {
     pub fn generate(&self, proto: &mut ProtoChunk) {
         let params = self.calculate_generation_params(proto);
         let mut state = GenerationState::new(self.initial_surface_estimate);
-        
+
         proto.noise_sampler.sample_start_density();
-        
+
         // Process each column of cells along the X axis
         for cell_x in 0..params.horizontal_cells {
             proto.noise_sampler.sample_end_density(cell_x as u8);
-            
+
             if self.process_x_cells(proto, &params, &mut state, cell_x) {
                 break; // All surfaces found
             }
-            
+
             proto.noise_sampler.swap_buffers();
         }
     }
@@ -71,8 +68,8 @@ impl SurfaceHeightGenerator {
         let minimum_cell_y = min_y / vertical_cell_block_count as i8;
         let cell_height = proto.noise_sampler.height() / vertical_cell_block_count as u16;
 
-        let start_cell = ((self.terrain_min_y - min_y as i32) / vertical_cell_block_count as i32)
-            .max(0) as u16;
+        let start_cell =
+            ((self.terrain_min_y - min_y as i32) / vertical_cell_block_count as i32).max(0) as u16;
         let end_cell = ((self.terrain_max_y - min_y as i32) / vertical_cell_block_count as i32)
             .min(cell_height as i32 - 1) as u16;
 
@@ -120,8 +117,10 @@ impl SurfaceHeightGenerator {
         let cell_z_offset = cell_z as i32 * params.horizontal_cell_block_count as i32;
         let cell_start_x = params.start_block_x + cell_x_offset;
         let cell_start_z = params.start_block_z + cell_z_offset;
-        let sample_start_x = (params.start_cell_x + cell_x as i32) * params.horizontal_cell_block_count as i32;
-        let sample_start_z = (params.start_cell_z + cell_z as i32) * params.horizontal_cell_block_count as i32;
+        let sample_start_x =
+            (params.start_cell_x + cell_x as i32) * params.horizontal_cell_block_count as i32;
+        let sample_start_z =
+            (params.start_cell_z + cell_z as i32) * params.horizontal_cell_block_count as i32;
 
         CellBounds {
             adaptive_start,
@@ -159,15 +158,17 @@ impl SurfaceHeightGenerator {
         cell_z: u16,
     ) -> bool {
         let cell_bounds = self.calculate_cell_bounds(params, state, cell_x, cell_z);
-        
+
         // Search from top to bottom (reverse Y order)
         for cell_y in (cell_bounds.adaptive_start..=cell_bounds.adaptive_end).rev() {
-            if state.columns_completed >= 256 {
+            if state.columns_completed >= (CHUNK_DIM as usize * CHUNK_DIM as usize) {
                 return true;
             }
-            
-            proto.noise_sampler.on_sampled_cell_corners(cell_x as u8, cell_y, cell_z as u8);
-            
+
+            proto
+                .noise_sampler
+                .on_sampled_cell_corners(cell_x as u8, cell_y, cell_z as u8);
+
             if self.process_y_layers_in_cell(proto, params, state, &cell_bounds, cell_y) {
                 return true;
             }
@@ -184,7 +185,8 @@ impl SurfaceHeightGenerator {
         cell_bounds: &CellBounds,
         cell_y: u16,
     ) -> bool {
-        let sample_start_y = (params.minimum_cell_y as i32 + cell_y as i32) * params.vertical_cell_block_count as i32;
+        let sample_start_y = (params.minimum_cell_y as i32 + cell_y as i32)
+            * params.vertical_cell_block_count as i32;
         let inv_horizontal = 1.0 / params.horizontal_cell_block_count as f64;
         let inv_vertical = 1.0 / params.vertical_cell_block_count as f64;
 
@@ -194,7 +196,16 @@ impl SurfaceHeightGenerator {
             let delta_y = local_y as f64 * inv_vertical;
             proto.noise_sampler.interpolate_y(delta_y);
 
-            if self.process_blocks_at_height(proto, params, state, cell_bounds, block_y, inv_horizontal) {
+            if self.process_blocks_at_height(
+                proto,
+                params,
+                state,
+                cell_bounds,
+                block_y,
+                local_y as i32,
+                sample_start_y,
+                inv_horizontal,
+            ) {
                 return true;
             }
         }
@@ -209,6 +220,8 @@ impl SurfaceHeightGenerator {
         state: &mut GenerationState,
         cell_bounds: &CellBounds,
         block_y: i32,
+        local_y: i32,
+        sample_start_y: i32,
         inv_horizontal: f64,
     ) -> bool {
         // Loop through all blocks in this horizontal layer
@@ -234,8 +247,12 @@ impl SurfaceHeightGenerator {
                 let block_state = proto
                     .noise_sampler
                     .sample_block_state(
-                        Vector3::new(cell_bounds.sample_start_x, block_y, cell_bounds.sample_start_z),
-                        Vector3::new(local_x as i32, 0, local_z as i32),
+                        Vector3::new(
+                            cell_bounds.sample_start_x,
+                            sample_start_y,
+                            cell_bounds.sample_start_z,
+                        ),
+                        Vector3::new(local_x as i32, local_y, local_z as i32),
                         &mut proto.surface_height_estimate_sampler,
                     )
                     .unwrap_or(proto.default_block);
@@ -245,9 +262,9 @@ impl SurfaceHeightGenerator {
                 // If we found a solid block, mark it as the surface height
                 if !block_state.is_air() {
                     self.handle_surface_found(proto, state, chunk_local_x, chunk_local_z, block_y);
-                    
-                    if state.columns_completed >= 256 {
-                        return true; // All 16x16 columns completed
+
+                    if state.columns_completed >= (CHUNK_DIM as usize * CHUNK_DIM as usize) {
+                        return true;
                     }
                 }
             }
@@ -263,7 +280,7 @@ impl SurfaceHeightGenerator {
         chunk_local_z: usize,
         block_y: i32,
     ) {
-        let index = chunk_local_x * 16 + chunk_local_z;
+        let index = chunk_local_x * CHUNK_DIM as usize + chunk_local_z;
         proto.flat_surface_height_map[index] = block_y as i64;
         state.surface_found[chunk_local_x][chunk_local_z] = true;
         state.columns_completed += 1;
@@ -287,7 +304,7 @@ struct GenerationParams {
 }
 
 struct GenerationState {
-    surface_found: [[bool; 16]; 16],
+    surface_found: [[bool; CHUNK_DIM as usize]; CHUNK_DIM as usize],
     columns_completed: usize,
     surface_samples: Vec<i32>,
     estimated_surface_y: i32,
@@ -296,7 +313,7 @@ struct GenerationState {
 impl GenerationState {
     fn new(initial_estimate: i32) -> Self {
         Self {
-            surface_found: [[false; 16]; 16],
+            surface_found: [[false; CHUNK_DIM as usize]; CHUNK_DIM as usize],
             columns_completed: 0,
             surface_samples: Vec::new(),
             estimated_surface_y: initial_estimate,
@@ -305,11 +322,13 @@ impl GenerationState {
 
     fn update_surface_estimate(&mut self, samples_for_convergence: usize) {
         if self.surface_samples.len() <= samples_for_convergence {
-            self.estimated_surface_y = self.surface_samples.iter().sum::<i32>() / self.surface_samples.len() as i32;
+            self.estimated_surface_y =
+                self.surface_samples.iter().sum::<i32>() / self.surface_samples.len() as i32;
         } else {
             let weight = 0.1;
             let latest_sample = *self.surface_samples.last().unwrap();
-            self.estimated_surface_y = ((1.0 - weight) * self.estimated_surface_y as f32 + weight * latest_sample as f32) as i32;
+            self.estimated_surface_y = ((1.0 - weight) * self.estimated_surface_y as f32
+                + weight * latest_sample as f32) as i32;
         }
     }
 }
