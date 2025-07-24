@@ -20,3 +20,8 @@ chrono.workspace = true
 zarrs.workspace = true
 zarrs_storage.workspace = true
 zarrs_filesystem.workspace = true
+
+# GPU support
+candle-core = { version = "0.8", features = ["cuda"]}
+candle-nn = "0.8"
+bytemuck = "1.0"
