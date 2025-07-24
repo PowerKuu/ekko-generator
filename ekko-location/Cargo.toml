@@ -22,6 +22,6 @@ zarrs_storage.workspace = true
 zarrs_filesystem.workspace = true
 
 # GPU support
-candle-core = { version = "0.8", features = ["cuda"]}
-candle-nn = "0.8"
+candle-core = { git = "https://github.com/huggingface/candle.git", features = ["cuda"] }
+candle-nn = { git = "https://github.com/huggingface/candle.git" }
 bytemuck = "1.0"

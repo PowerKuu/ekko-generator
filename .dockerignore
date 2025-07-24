@@ -1,0 +1,14 @@
+.git/
+.gitignore
+README.md
+*.md
+.claude/
+Dockerfile
+**/docker-compose.yml
+docker-compose.yml
+.dockerignore
+**/target
+target
+**/.zarr_data*
+.zarr_data*
+../target

@@ -213,7 +213,7 @@ fn simple_pattern_analysis(tensor: &Tensor, chunk_coords: &[u64]) -> Result<(), 
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("CUDA available? {}", tch::Cuda::is_available());
+    println!("CUDA available? {}", Device::new_cuda(0).is_ok());
     
     let config = load_config();
     println!("Zarr file: {}", config.zarr_storage_location);
