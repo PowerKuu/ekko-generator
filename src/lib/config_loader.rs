@@ -1,6 +1,6 @@
+use crate::lib::zarr_storage::CompressionType;
 use serde::Deserialize;
 use std::fs;
-use crate::lib::zarr_storage::CompressionType;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -50,11 +50,20 @@ impl Config {
     pub fn get_zarr_compression(&self) -> CompressionType {
         match self.zarr_compression.to_lowercase().as_str() {
             "none" => CompressionType::None,
-            "gzip" => CompressionType::Gzip { level: self.zarr_compression_level as u32 },
-            "zstd" => CompressionType::Zstd { level: self.zarr_compression_level },
+            "gzip" => CompressionType::Gzip {
+                level: self.zarr_compression_level as u32,
+            },
+            "zstd" => CompressionType::Zstd {
+                level: self.zarr_compression_level,
+            },
             _ => {
-                eprintln!("Unknown compression type '{}', defaulting to zstd", self.zarr_compression);
-                CompressionType::Zstd { level: self.zarr_compression_level }
+                eprintln!(
+                    "Unknown compression type '{}', defaulting to zstd",
+                    self.zarr_compression
+                );
+                CompressionType::Zstd {
+                    level: self.zarr_compression_level,
+                }
             }
         }
     }

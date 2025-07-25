@@ -1,18 +1,17 @@
-[workspace]
-resolver = "2"
-members = [
-    "ekko-generation",
-    "ekko-location"
-]
-
-[profile.release]
-debug = true
-
-[workspace.package]
+[package]
+name = "ekko-generator"
 version = "0.1.0"
 edition = "2021"
 
-[workspace.dependencies]
+[[bin]]
+name = "ekko-generator"
+path = "src/main.rs"
+
+[dependencies]
+pumpkin-world = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-world" }
+pumpkin-util = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-util" }
+pumpkin-data = { git = "https://github.com/Pumpkin-MC/Pumpkin.git", package = "pumpkin-data" }
+
 tokio = { version = "1.4", features = ["full", "signal"] }
 ctrlc = "3.4"
 rayon = "1.10"

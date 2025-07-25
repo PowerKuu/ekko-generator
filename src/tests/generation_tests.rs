@@ -112,13 +112,14 @@ pub async fn parallel_test_with_storage() {
         dimension,
         move |proto, chunk_x, chunk_z| {
             let storage_ref = Arc::clone(&storage_clone);
-            let height_map: Vec<i64> = proto.flat_surface_height_map.iter().map(|&h| h as i64).collect();
+            let height_map: Vec<i64> = proto
+                .flat_surface_height_map
+                .iter()
+                .map(|&h| h as i64)
+                .collect();
 
             tokio::spawn(async move {
-                if let Err(e) = storage_ref
-                    .store_chunk(chunk_x, chunk_z, height_map)
-                    .await
-                {
+                if let Err(e) = storage_ref.store_chunk(chunk_x, chunk_z, height_map).await {
                     eprintln!("Failed to store chunk: {}", e);
                 }
             });
@@ -141,7 +142,7 @@ pub async fn radius_test_with_storage() {
     let dimension = Dimension::Overworld;
 
     use crate::lib::parallelization::generate_radius_range_chunk_coords;
-    
+
     let chunk_coords = generate_radius_range_chunk_coords(
         config.chunk_radius_center_x,
         config.chunk_radius_center_z,
@@ -150,7 +151,11 @@ pub async fn radius_test_with_storage() {
         config.chunk_radius_circular,
     );
 
-    let shape = if config.chunk_radius_circular { "circular" } else { "square" };
+    let shape = if config.chunk_radius_circular {
+        "circular"
+    } else {
+        "square"
+    };
     println!(
         "Testing {} radius range generation with {} chunks (radius {} to {})",
         shape,
@@ -180,13 +185,14 @@ pub async fn radius_test_with_storage() {
         dimension,
         move |proto, chunk_x, chunk_z| {
             let storage_ref = Arc::clone(&storage_clone);
-            let height_map: Vec<i64> = proto.flat_surface_height_map.iter().map(|&h| h as i64).collect();
+            let height_map: Vec<i64> = proto
+                .flat_surface_height_map
+                .iter()
+                .map(|&h| h as i64)
+                .collect();
 
             tokio::spawn(async move {
-                if let Err(e) = storage_ref
-                    .store_chunk(chunk_x, chunk_z, height_map)
-                    .await
-                {
+                if let Err(e) = storage_ref.store_chunk(chunk_x, chunk_z, height_map).await {
                     eprintln!("Failed to store chunk: {}", e);
                 }
             });

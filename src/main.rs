@@ -1,7 +1,6 @@
 use crate::lib::config_loader::{load_config, Config};
 use crate::lib::parallelization::{
-    create_batch_ranges, get_radius_range_stats, process_all_batches_parallel,
-    BatchStats,
+    create_batch_ranges, get_radius_range_stats, process_all_batches_parallel, BatchStats,
 };
 use crate::lib::shutdown_handler::{
     get_current_chunk_index, is_shutdown_requested, setup_shutdown_handler,
@@ -92,7 +91,7 @@ pub async fn ekko() {
     let dimension = Dimension::Overworld;
 
     print_startup_info(&config);
-    
+
     let storage = initialize_storage(&config).await;
 
     let start_index = config.chunk_radius_start_index;
@@ -103,16 +102,17 @@ pub async fn ekko() {
     let total_chunks = calculate_total_chunks(&config);
     print_generation_info(&config, start_index, total_chunks);
 
-
     let batch_ranges = create_batch_ranges(start_index, total_chunks, config.chunk_batch_size);
 
-    
     let total_start_time = Instant::now();
 
     let chunk_callback = create_chunk_callback(storage.clone());
 
     let batch_callback = create_batch_callback(storage.clone());
-    println!("⚡ Building... and Processing {} Batches:", batch_ranges.len());
+    println!(
+        "⚡ Building... and Processing {} Batches:",
+        batch_ranges.len()
+    );
 
     let result = process_all_batches_parallel(
         batch_ranges,
@@ -153,11 +153,16 @@ async fn initialize_storage(config: &Config) -> Option<Arc<ZarrBlockStorage>> {
         config.zarr_chunk_region_size,
         Some(config.get_zarr_compression()),
         generation_metadata,
-    ).await {
+    )
+    .await
+    {
         Ok(storage) => {
             println!("💾 Zarr Storage Initialized");
             println!("   • Location: {}", config.zarr_storage_location);
-            println!("   • Zarr region size: {} chunks", config.zarr_chunk_region_size);
+            println!(
+                "   • Zarr region size: {} chunks",
+                config.zarr_chunk_region_size
+            );
             println!("   • Compression: {}", config.zarr_compression);
             println!();
             Arc::new(storage)
@@ -174,7 +179,6 @@ async fn initialize_storage(config: &Config) -> Option<Arc<ZarrBlockStorage>> {
     Some(storage_arc)
 }
 
-
 // Callbacks
 fn create_chunk_callback(
     storage: Option<Arc<ZarrBlockStorage>>,
@@ -189,7 +193,11 @@ fn create_chunk_callback(
         fn call(&self, proto: &ProtoChunk, chunk_x: i32, chunk_z: i32) {
             if let Some(storage_ref) = &self.storage {
                 let storage_ref = Arc::clone(storage_ref);
-                let height_map: Vec<i64> = proto.flat_surface_height_map.iter().map(|&h| h as i64).collect();
+                let height_map: Vec<i64> = proto
+                    .flat_surface_height_map
+                    .iter()
+                    .map(|&h| h as i64)
+                    .collect();
 
                 self.runtime.spawn(async move {
                     if let Err(e) = storage_ref.store_chunk(chunk_x, chunk_z, height_map).await {
@@ -210,9 +218,7 @@ fn create_chunk_callback(
     }
 }
 
-fn create_batch_callback(
-    storage: Option<Arc<ZarrBlockStorage>>,
-) -> impl Fn(BatchStats) {
+fn create_batch_callback(storage: Option<Arc<ZarrBlockStorage>>) -> impl Fn(BatchStats) {
     move |stats: BatchStats| {
         update_current_chunk_index(stats.chunks_completed);
 
@@ -239,7 +245,11 @@ fn create_batch_callback(
 // Prints
 fn print_generation_info(_config: &Config, start_index: usize, total_chunks: usize) {
     println!("🚀 Starting Generation");
-    println!("   • Processing: {} chunks ({} blocks)", total_chunks - start_index, (total_chunks - start_index)*(CHUNK_DIM as usize*CHUNK_DIM as usize));
+    println!(
+        "   • Processing: {} chunks ({} blocks)",
+        total_chunks - start_index,
+        (total_chunks - start_index) * (CHUNK_DIM as usize * CHUNK_DIM as usize)
+    );
     println!();
 }
 
@@ -314,9 +324,19 @@ fn print_startup_info(config: &Config) {
     println!("🎯 Ekko Generator - Minecraft Chunk Generation Tool");
     println!();
     println!("🛠️  Configuration:");
-    let shape = if config.chunk_radius_circular { "circular" } else { "square" };
-    println!("   • Mode: {} radius {} to {}", shape, config.chunk_radius_start, config.chunk_radius_end);
-    println!("   • Center: ({}, {})", config.chunk_radius_center_x, config.chunk_radius_center_z);
+    let shape = if config.chunk_radius_circular {
+        "circular"
+    } else {
+        "square"
+    };
+    println!(
+        "   • Mode: {} radius {} to {}",
+        shape, config.chunk_radius_start, config.chunk_radius_end
+    );
+    println!(
+        "   • Center: ({}, {})",
+        config.chunk_radius_center_x, config.chunk_radius_center_z
+    );
     println!("   • Start index: {}", config.chunk_radius_start_index);
     println!("   • Batch size: {} chunks", config.chunk_batch_size);
     println!();
@@ -330,9 +350,16 @@ fn print_radius_stats(config: &Config) {
         config.chunk_radius_end,
         config.chunk_radius_circular,
     );
-    
-    let shape = if config.chunk_radius_circular { "Circular" } else { "Square" };
-    println!("📊 {} Radius Range {} to {} Generation Stats:", shape, config.chunk_radius_start, config.chunk_radius_end);
+
+    let shape = if config.chunk_radius_circular {
+        "Circular"
+    } else {
+        "Square"
+    };
+    println!(
+        "📊 {} Radius Range {} to {} Generation Stats:",
+        shape, config.chunk_radius_start, config.chunk_radius_end
+    );
     println!("   • Total chunks: {}", total_chunks);
     println!("   • Area coverage: {:.2} km²", area_km2);
     println!(
@@ -350,7 +377,7 @@ fn calculate_total_chunks(config: &Config) -> usize {
         config.chunk_radius_end,
         config.chunk_radius_circular,
     );
-    
+
     total_chunks
 }
 

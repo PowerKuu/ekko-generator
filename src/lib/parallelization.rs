@@ -47,16 +47,21 @@ pub fn generate_radius_range_chunk_coords(
     circular: bool,
 ) -> Vec<(i32, i32)> {
     let mut all_coords = Vec::new();
-    
+
     if circular {
         // Much faster: generate all coords in end radius, exclude those in start radius
         let radius_end_squared = radius_end * radius_end;
-        let radius_start_squared = if radius_start > 0 { (radius_start - 1) * (radius_start - 1) } else { -1 };
-        
+        let radius_start_squared = if radius_start > 0 {
+            (radius_start - 1) * (radius_start - 1)
+        } else {
+            -1
+        };
+
         for x in -radius_end..=radius_end {
             for z in -radius_end..=radius_end {
                 let distance_squared = x * x + z * z;
-                if distance_squared <= radius_end_squared && distance_squared > radius_start_squared {
+                if distance_squared <= radius_end_squared && distance_squared > radius_start_squared
+                {
                     all_coords.push((center_x + x, center_z + z));
                 }
             }
@@ -71,21 +76,21 @@ pub fn generate_radius_range_chunk_coords(
                 } else {
                     false
                 };
-                
+
                 if !in_start_square {
                     all_coords.push((center_x + x, center_z + z));
                 }
             }
         }
     }
-    
+
     // Sort by distance from center for efficient processing
     all_coords.sort_by(|a, b| {
         let dist_a = (a.0 - center_x) * (a.0 - center_x) + (a.1 - center_z) * (a.1 - center_z);
         let dist_b = (b.0 - center_x) * (b.0 - center_x) + (b.1 - center_z) * (b.1 - center_z);
         dist_a.cmp(&dist_b)
     });
-    
+
     all_coords
 }
 
@@ -106,7 +111,7 @@ pub fn length_of_radius_range_chunk_coords(
                 }
             }
         }
-        
+
         let total_in_start = if radius_start > 0 {
             let mut count = 0;
             let start_radius_squared = (radius_start - 1) * (radius_start - 1);
@@ -122,7 +127,7 @@ pub fn length_of_radius_range_chunk_coords(
         } else {
             0
         };
-        
+
         total_in_end - total_in_start
     } else {
         // For square: this IS 100% accurate
@@ -130,7 +135,9 @@ pub fn length_of_radius_range_chunk_coords(
         let inner = if radius_start > 0 {
             let r = radius_start - 1;
             (2 * r + 1) * (2 * r + 1)
-        } else { 0 };
+        } else {
+            0
+        };
         (outer - inner) as usize
     }
 }
@@ -141,12 +148,9 @@ pub fn get_radius_range_stats(
     radius_end: i32,
     circular: bool,
 ) -> (usize, f64, i32) {
-    let chunk_count = length_of_radius_range_chunk_coords(
-        radius_start,
-        radius_end,
-        circular
-    );
-    let area_km2 = (chunk_count as f64 * (CHUNK_DIM as usize * CHUNK_DIM as usize) as f64) / 1_000_000.0;
+    let chunk_count = length_of_radius_range_chunk_coords(radius_start, radius_end, circular);
+    let area_km2 =
+        (chunk_count as f64 * (CHUNK_DIM as usize * CHUNK_DIM as usize) as f64) / 1_000_000.0;
     let diameter = radius_end * 2 + 1;
     (chunk_count, area_km2, diameter)
 }

@@ -5,7 +5,10 @@ use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
 use pumpkin_world::{
     dimension::Dimension,
     generation::{
-        chunk_noise::CHUNK_DIM, positions::chunk_pos::{start_block_x, start_block_z}, settings::gen_settings_from_dimension, Seed
+        chunk_noise::CHUNK_DIM,
+        positions::chunk_pos::{start_block_x, start_block_z},
+        settings::gen_settings_from_dimension,
+        Seed,
     },
     ProtoChunk, ProtoNoiseRouters,
 };
